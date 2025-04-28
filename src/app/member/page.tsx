@@ -168,7 +168,7 @@ export default function MemberDashboard() {
   );
 }
 
-// Add metadata for the page - can remain static or be updated dynamically if needed
+// Removed metadata export as it's not allowed in "use client" components
 // export const metadata = {
 //   title: "Member Dashboard | Leaderboard Lite",
 //   description: "View your points, the leaderboard, and request more points.",

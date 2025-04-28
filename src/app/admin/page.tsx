@@ -258,7 +258,8 @@ export default function AdminDashboard() {
   );
 }
 
-// Add metadata for the page
+
+// Removed metadata export as it's not allowed in "use client" components
 // export const metadata = {
 //   title: "Admin Dashboard | Leaderboard Lite",
 //   description: "Manage members, view the leaderboard, and process point requests.",

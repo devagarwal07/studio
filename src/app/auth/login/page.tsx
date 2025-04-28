@@ -129,7 +129,8 @@ export default function LoginPage() {
   );
 }
 
-export const metadata = {
-  title: "Login | Leaderboard Lite",
-  description: "Login to your Leaderboard Lite account.",
-};
+// Removed metadata export as it's not allowed in "use client" components
+// export const metadata = {
+//   title: "Login | Leaderboard Lite",
+//   description: "Login to your Leaderboard Lite account.",
+// };

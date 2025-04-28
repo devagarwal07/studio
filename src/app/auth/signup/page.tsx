@@ -140,7 +140,8 @@ export default function SignupPage() {
   );
 }
 
-export const metadata = {
-  title: "Sign Up | Leaderboard Lite",
-  description: "Create a new Leaderboard Lite account.",
-};
+// Removed metadata export as it's not allowed in "use client" components
+// export const metadata = {
+//   title: "Sign Up | Leaderboard Lite",
+//   description: "Create a new Leaderboard Lite account.",
+// };
