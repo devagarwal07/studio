@@ -20,6 +20,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
+// import { useAuth } from '@/context/auth-context'; // Not strictly needed here if userId/Name passed as props
 
 const pointRequestFormSchema = z.object({
   description: z.string().min(10, {
@@ -32,21 +33,31 @@ const pointRequestFormSchema = z.object({
 
 type PointRequestFormValues = z.infer<typeof pointRequestFormSchema>;
 
-// Mock function to submit point request
-async function submitPointRequest(data: PointRequestFormValues): Promise<boolean> {
-  console.log("Submitting point request:", data);
+// Mock function to submit point request - Update to include user info
+// TODO: Replace with actual Firestore/API call
+async function submitPointRequest(data: PointRequestFormValues, userId?: string, userName?: string): Promise<boolean> {
+  if (!userId) {
+    console.error("Cannot submit request without user ID.");
+    return false;
+  }
+  console.log("Submitting point request:", { ...data, userId, userName });
   // Simulate API call
   await new Promise(resolve => setTimeout(resolve, 700));
-  // In a real app, this would interact with your backend API
+  // In a real app, this would interact with your backend API, creating a document
+  // in a 'pointRequests' collection in Firestore, including userId, userName, etc.
   return true; // Simulate success
 }
 
 interface PointRequestFormProps {
+  userId?: string; // Pass user ID
+  userName?: string; // Pass user name
   onSuccess?: () => void; // Optional callback on successful submission
 }
 
-export function PointRequestForm({ onSuccess }: PointRequestFormProps) {
+export function PointRequestForm({ userId, userName, onSuccess }: PointRequestFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  // const { user } = useAuth(); // Could get user here, but passing props is clearer for component reuse
+
   const form = useForm<PointRequestFormValues>({
     resolver: zodResolver(pointRequestFormSchema),
     defaultValues: {
@@ -57,9 +68,14 @@ export function PointRequestForm({ onSuccess }: PointRequestFormProps) {
   });
 
   async function onSubmit(data: PointRequestFormValues) {
+     if (!userId) {
+       toast({ title: "Error", description: "You must be logged in to submit a request.", variant: "destructive" });
+       return;
+     }
     setIsLoading(true);
     try {
-      const success = await submitPointRequest(data);
+      // Pass user info to the submission function
+      const success = await submitPointRequest(data, userId, userName);
       if (success) {
         toast({
           title: "Request Submitted",
@@ -95,6 +111,7 @@ export function PointRequestForm({ onSuccess }: PointRequestFormProps) {
                   placeholder="Describe the activity you completed..."
                   className="resize-none"
                   {...field}
+                  disabled={!userId} // Disable if not logged in
                 />
               </FormControl>
               <FormDescription>
@@ -111,7 +128,14 @@ export function PointRequestForm({ onSuccess }: PointRequestFormProps) {
             <FormItem>
               <FormLabel>Points Requested</FormLabel>
               <FormControl>
-                 <Input type="number" placeholder="Enter points" {...field} min="1" max="100" />
+                 <Input
+                   type="number"
+                   placeholder="Enter points"
+                   {...field}
+                   min="1"
+                   max="100"
+                   disabled={!userId} // Disable if not logged in
+                  />
               </FormControl>
                <FormDescription>
                 How many points are you requesting? (1-100)
@@ -120,8 +144,8 @@ export function PointRequestForm({ onSuccess }: PointRequestFormProps) {
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={isLoading}>
-           {isLoading ? "Submitting..." : "Request Points"}
+        <Button type="submit" disabled={isLoading || !userId}>
+           {!userId ? "Login Required" : isLoading ? "Submitting..." : "Request Points"}
         </Button>
       </form>
     </Form>
