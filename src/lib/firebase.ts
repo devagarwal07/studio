@@ -2,6 +2,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 // import { getAnalytics } from "firebase/analytics"; // Optional: Add if needed
+// import { getFirestore } from 'firebase/firestore'; // Import Firestore if needed
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -18,6 +19,7 @@ const firebaseConfig = {
 // Initialize Firebase only if it hasn't been initialized yet
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
-// const analytics = getAnalytics(app); // Optional: Initialize Analytics if needed
+// const db = getFirestore(app); // Initialize Firestore if needed
+// const analytics = typeof window !== 'undefined' ? getAnalytics(app) : undefined; // Optional: Initialize Analytics if needed (client-side only)
 
-export { app, auth };
+export { app, auth }; // Add db if initialized
