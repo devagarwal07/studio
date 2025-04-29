@@ -1,36 +1,34 @@
 
-'use client'; // Needs client-side hook for redirection checking
+'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/auth-context';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/context/auth-context'; // Import useAuth to potentially access loading state if needed
 
 export default function HomePage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+   const { loading } = useAuth(); // Get loading state from context
 
-  useEffect(() => {
-    if (!loading) {
-      if (user) {
-        // User is logged in, redirect to appropriate dashboard
-        // Basic example: redirect all logged-in users to /member
-        // More complex logic (like checking admin role) should happen
-        // either here (if client-side check is sufficient) or ideally
-        // within the AuthProvider or dedicated middleware/route handlers.
-        router.replace('/member'); // Or determine '/admin' based on role
-      } else {
-        // User is not logged in, redirect to login
-        router.replace('/auth/login');
-      }
-    }
-  }, [user, loading, router]);
+   // No need for redirection logic here anymore, AuthProvider handles it.
+   // We can just show a loading indicator if auth is still loading,
+   // otherwise AuthProvider will have already redirected.
 
-  // Display a loading indicator while checking auth state
-  return (
-     <div className="flex items-center justify-center min-h-screen">
-            <Skeleton className="h-12 w-12 rounded-full animate-spin" />
-             <Skeleton className="h-4 w-[250px] ml-4" />
+  // Display a loading indicator while checking auth state initially
+  // or let AuthProvider handle the loading screen
+   if (loading) {
+       return (
+         <div className="flex items-center justify-center min-h-screen bg-background">
+                <Skeleton className="h-12 w-12 rounded-full animate-spin" />
+                 <p className='ml-4 text-muted-foreground'>Initializing...</p>
+            </div>
+      );
+   }
+
+   // If not loading, AuthProvider should have redirected.
+   // This return might not even be reached in most cases.
+   // You could potentially show a generic message or a minimal layout here.
+   return (
+        <div className="flex items-center justify-center min-h-screen bg-background">
+             {/* Optionally show something if needed, but usually redirect happens */}
+             <p className="text-muted-foreground">Redirecting...</p>
         </div>
-  );
+    );
 }

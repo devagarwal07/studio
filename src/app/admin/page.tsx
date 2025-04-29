@@ -1,8 +1,8 @@
 
-'use client'; // This component needs state for handling updates and auth
+'use client'; // This component needs state for handling updates and auth context
 
 import { useState, useEffect, Suspense } from 'react';
-import { useRouter } from 'next/navigation'; // Import useRouter for redirection
+import { useRouter } from 'next/navigation'; // Still useful for potential client-side actions if needed
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LeaderboardTable } from "@/components/leaderboard-table";
 import { PointRequestList } from "@/components/point-request-list";
@@ -14,17 +14,13 @@ import { useAuth } from '@/context/auth-context'; // Import useAuth
 import { toast } from '@/hooks/use-toast'; // Import toast
 
 // Mock function to get initial data - replace with actual data fetching
-// TODO: Add proper security checks - ensure only admins can fetch this data
+// IMPORTANT: Add proper server-side security checks - ensure only verified admins can fetch this data
 async function getAdminData(userId: string | undefined): Promise<{ members: Member[], requests: PointRequest[] }> {
    console.log("Attempting to fetch admin data for user:", userId);
-   if (!userId) throw new Error("Authentication required"); // Basic check
+   if (!userId) throw new Error("Authentication required");
 
-   // !! IMPORTANT: Add server-side validation here to ensure the user `userId` IS an admin !!
-   // This might involve checking a custom claim in Firebase Auth or querying a 'roles' collection.
-   // Without this, any logged-in user could potentially call this mock.
-   // Example (conceptual):
-   // const isAdmin = await checkUserAdminRole(userId);
-   // if (!isAdmin) throw new Error("Unauthorized: Admin role required");
+   // !! IMPORTANT: Server-side validation should confirm the `userId` IS an admin !!
+   // This is crucial even if AuthProvider restricts access, to protect the API endpoint itself.
 
   // Simulate API delay
   await new Promise(resolve => setTimeout(resolve, 1200));
@@ -55,13 +51,14 @@ function LogoutButton() {
         setIsLoggingOut(true);
         try {
             await signOut();
-            toast({ title: "Logged Out Successfully" });
+            // toast({ title: "Logged Out Successfully" }); // Optional: Toast on successful logout
             // Redirect handled by AuthProvider
         } catch (error) {
             console.error("Logout failed:", error);
             toast({ title: "Logout Failed", description: "Please try again.", variant: "destructive" });
-            setIsLoggingOut(false);
+            setIsLoggingOut(false); // Re-enable button if logout fails
         }
+         // Don't set isLoggingOut to false here, page should redirect or change state
     };
 
   return (
@@ -73,60 +70,21 @@ function LogoutButton() {
 
 
 export default function AdminDashboard() {
-  const { user, loading: authLoading } = useAuth(); // Get user and loading state
-  const router = useRouter();
+  const { user, loading: authLoading, isAdmin } = useAuth(); // Get user, loading state, and isAdmin status
+  const router = useRouter(); // Keep router for potential future use
   const [members, setMembers] = useState<Member[]>([]);
   const [requests, setRequests] = useState<PointRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null); // null = checking, false = not admin, true = admin
+  const [isLoadingData, setIsLoadingData] = useState(true); // Renamed to avoid conflict with authLoading
+
+  // Authorization is now primarily handled by AuthProvider redirecting non-admins away.
+  // We can use the `isAdmin` state from context to decide whether to fetch/render data.
 
   useEffect(() => {
-    // Client-side authorization check (basic example)
-    // IMPORTANT: This is NOT secure on its own. Real security requires server-side checks.
-    // Use Firebase custom claims or a database role check for proper authorization.
-    if (!authLoading) { // Only run after auth state is determined
-        if (!user) {
-             // Handled by AuthProvider, but good failsafe
-             router.push('/auth/login');
-             setIsAuthorized(false);
-        } else {
-            // --- Replace with actual admin check ---
-            // Example: Check custom claim (requires backend setup)
-            // user.getIdTokenResult().then((idTokenResult) => {
-            //   if (idTokenResult.claims.admin) {
-            //     setIsAuthorized(true);
-            //   } else {
-            //     toast({ title: "Access Denied", description: "You do not have permission to view this page.", variant: "destructive" });
-            //     router.push('/member'); // Redirect non-admins
-            //     setIsAuthorized(false);
-            //   }
-            // }).catch(error => {
-            //      console.error("Error fetching token results:", error);
-            //      toast({ title: "Authorization Error", description: "Could not verify permissions.", variant: "destructive" });
-            //      router.push('/member');
-            //      setIsAuthorized(false);
-            // });
-
-            // --- Mock Admin Check (REMOVE IN PRODUCTION) ---
-            // For demonstration, assume a specific email is the admin
-            if (user.email === 'admin@example.com') { // !!! REPLACE THIS CHECK !!!
-                 setIsAuthorized(true);
-            } else {
-                toast({ title: "Access Denied", description: "You do not have permission to view this page.", variant: "destructive" });
-                router.push('/member'); // Redirect non-admins
-                setIsAuthorized(false);
-            }
-             // --- End Mock Admin Check ---
-        }
-    }
-  }, [user, authLoading, router]);
-
-
-  useEffect(() => {
-    // Fetch data only if authorized
+    // Fetch data only if the user is authenticated and verified as admin
     async function loadData() {
-       if (isAuthorized === true && user) {
-           setIsLoading(true);
+       // Check if auth check is done, user exists, and isAdmin is confirmed true
+       if (!authLoading && user && isAdmin === true) {
+           setIsLoadingData(true);
             try {
                 const data = await getAdminData(user.uid); // Pass user ID
                 setMembers(data.members);
@@ -134,20 +92,24 @@ export default function AdminDashboard() {
             } catch (error: any) {
                  console.error("Failed to load admin data:", error);
                  toast({ title: "Error Loading Data", description: error.message || "Could not fetch admin data.", variant: "destructive"});
-                 // Handle error - maybe clear data or show error message
                  setMembers([]);
                  setRequests([]);
             } finally {
-                setIsLoading(false);
+                setIsLoadingData(false);
             }
-       } else if (isAuthorized === false) {
-            // If determined not authorized, ensure loading is false
-            setIsLoading(false);
+       } else if (!authLoading && (user === null || isAdmin === false)) {
+            // If auth check is done but user is not admin or not logged in, ensure loading is false.
+            // AuthProvider should have already redirected, but this is a safeguard.
+            setIsLoadingData(false);
+             if (isAdmin === false) {
+                // Optionally show a message if somehow the user landed here without being admin
+                // toast({ title: "Access Denied", description: "Redirecting...", variant: "destructive" });
+             }
        }
     }
 
     loadData();
-  }, [isAuthorized, user]); // Depend on authorization status and user
+  }, [user, authLoading, isAdmin]); // Depend on user, authLoading, and isAdmin status
 
 
   // Function to update request status locally after approval/rejection
@@ -176,22 +138,35 @@ export default function AdminDashboard() {
   const pendingRequests = requests.filter(req => req.status === 'pending');
   const processedRequests = requests.filter(req => req.status !== 'pending').sort((a, b) => b.requestedAt.getTime() - a.requestedAt.getTime()); // Show newest first
 
-   // Loading state for auth check or initial load
-   if (authLoading || isAuthorized === null) {
-      return <div className="container mx-auto p-4 md:p-8 min-h-screen flex justify-center items-center"><Skeleton className="h-16 w-16 rounded-full animate-spin" /></div>;
+   // Show loading skeleton while auth is checking or if isAdmin is still null
+   if (authLoading || isAdmin === null) {
+      return (
+        <div className="container mx-auto p-4 md:p-8 min-h-screen flex justify-center items-center">
+             <Skeleton className="h-16 w-16 rounded-full animate-spin" />
+        </div>
+      );
    }
 
-   // If not authorized, show minimal content or nothing (already redirected ideally)
-   if (!isAuthorized) {
-      return <div className="container mx-auto p-4 md:p-8 min-h-screen"><p>Access Denied.</p></div>; // Or just null if redirection is reliable
+   // If AuthProvider confirmed user is NOT admin, show minimal content or null.
+   // Ideally, AuthProvider redirects before this point.
+   if (isAdmin === false) {
+      return (
+          <div className="container mx-auto p-4 md:p-8 min-h-screen">
+             <p>Access Denied. You do not have permission to view this page.</p>
+              {/* Optionally add a button to redirect to member page or logout */}
+              <Button onClick={() => router.push('/member')} className="mt-4 mr-2">Go to Member Dashboard</Button>
+              <LogoutButton />
+          </div>
+      );
    }
 
 
-  // Render dashboard only if authorized
+  // Render dashboard only if authenticated and confirmed as admin
   return (
     <div className="container mx-auto p-4 md:p-8 min-h-screen">
        <header className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-primary">Admin Dashboard</h1>
+        {user && <span className="text-sm text-muted-foreground hidden md:inline">Welcome, {user.displayName || user.email}</span>}
         <LogoutButton />
        </header>
 
@@ -205,7 +180,7 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
                <Suspense fallback={<Skeleton className="h-[200px] w-full rounded-md" />}>
-                 {isLoading ? (
+                 {isLoadingData ? (
                      <Skeleton className="h-[200px] w-full rounded-md" />
                  ) : (
                     <LeaderboardTable members={members} />
@@ -224,7 +199,7 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
                <Suspense fallback={<Skeleton className="h-[150px] w-full rounded-md" />}>
-                 {isLoading ? (
+                 {isLoadingData ? (
                     <Skeleton className="h-[150px] w-full rounded-md" />
                  ) : (
                     <PointRequestList
@@ -244,7 +219,7 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
                <Suspense fallback={<Skeleton className="h-[150px] w-full rounded-md" />}>
-                 {isLoading ? (
+                 {isLoadingData ? (
                      <Skeleton className="h-[150px] w-full rounded-md" />
                  ) : (
                     <PointRequestList requests={processedRequests} showActions={false} />
@@ -257,10 +232,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-
-
-// Removed metadata export as it's not allowed in "use client" components
-// export const metadata = {
-//   title: "Admin Dashboard | Leaderboard Lite",
-//   description: "Manage members, view the leaderboard, and process point requests.",
-// };
