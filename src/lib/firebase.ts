@@ -2,10 +2,11 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 // import { getAnalytics } from "firebase/analytics"; // Optional: Add if needed
-// import { getFirestore } from 'firebase/firestore'; // Import Firestore if needed
+import { getFirestore } from 'firebase/firestore'; // Import Firestore
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// Use environment variables for sensitive information
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -19,7 +20,7 @@ const firebaseConfig = {
 // Initialize Firebase only if it hasn't been initialized yet
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
-// const db = getFirestore(app); // Initialize Firestore if needed
+const db = getFirestore(app); // Initialize Firestore
 // const analytics = typeof window !== 'undefined' ? getAnalytics(app) : undefined; // Optional: Initialize Analytics if needed (client-side only)
 
-export { app, auth }; // Add db if initialized
+export { app, auth, db }; // Export db

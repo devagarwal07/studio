@@ -1,16 +1,18 @@
 
 export interface Member {
-  id: string;
-  name: string;
+  id: string; // Corresponds to Firebase Auth UID
+  name: string; // Display Name
+  email: string; // Email address
   points: number;
+  role: 'member' | 'admin'; // Added role field
 }
 
 export interface PointRequest {
-  id: string;
-  memberId: string;
+  id: string; // Firestore document ID
+  memberId: string; // Firebase Auth UID of the member
   memberName: string; // Denormalized for easier display
   description: string;
-  requestedAt: Date;
+  requestedAt: Date; // Store as Firestore Timestamp, convert on fetch
   status: 'pending' | 'approved' | 'rejected';
-  points?: number; // Points to be awarded if approved
+  points: number; // Points requested
 }
