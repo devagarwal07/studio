@@ -2,33 +2,22 @@
 'use client';
 
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuth } from '@/context/auth-context'; // Import useAuth to potentially access loading state if needed
+import { useAuth } from '@/context/auth-context';
 
 export default function HomePage() {
    const { loading } = useAuth(); // Get loading state from context
 
-   // No need for redirection logic here anymore, AuthProvider handles it.
-   // We can just show a loading indicator if auth is still loading,
-   // otherwise AuthProvider will have already redirected.
+   // AuthProvider handles the actual loading screen and redirection.
+   // This component acts as a placeholder while that logic runs.
+   // If AuthProvider is still loading, its loading screen will be shown.
+   // If AuthProvider finished loading and determined a redirect, it will happen.
+   // This component might briefly show if there's a tiny delay.
 
-  // Display a loading indicator while checking auth state initially
-  // or let AuthProvider handle the loading screen
-   if (loading) {
-       return (
-         <div className="flex items-center justify-center min-h-screen bg-background">
-                <Skeleton className="h-12 w-12 rounded-full animate-spin" />
-                 <p className='ml-4 text-muted-foreground'>Initializing...</p>
-            </div>
-      );
-   }
-
-   // If not loading, AuthProvider should have redirected.
-   // This return might not even be reached in most cases.
-   // You could potentially show a generic message or a minimal layout here.
-   return (
+  return (
         <div className="flex items-center justify-center min-h-screen bg-background">
-             {/* Optionally show something if needed, but usually redirect happens */}
-             <p className="text-muted-foreground">Redirecting...</p>
+             {/* Basic indicator, might not be seen if redirection is fast */}
+             <Skeleton className="h-12 w-12 rounded-full animate-spin" />
+             <p className='ml-4 text-muted-foreground'>Loading...</p>
         </div>
     );
 }

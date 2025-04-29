@@ -51,12 +51,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         toast({ title: "Logged Out", description: "You have been logged out." });
          // Explicitly push to login, as sometimes the listener might have race conditions on fast signouts
          router.push('/auth/login');
+         // Reset local state immediately on sign out intent
+         setUser(null);
+         setMemberRole(null);
     } catch (error) {
       console.error("Error signing out: ", error);
        toast({ title: "Logout Failed", description: "Please try again.", variant: "destructive"});
-      setLoading(false); // Stop loading on error
+    } finally {
+      // Loading state will be managed by the subsequent onAuthStateChanged trigger
+      // setLoading(false); // Avoid setting false here, let the listener handle it
     }
-     // Loading is set to false by the onAuthStateChanged listener after state update
   }, [router]);
 
 
@@ -64,96 +68,103 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log("AuthProvider effect running. Pathname:", pathname);
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       console.log("onAuthStateChanged triggered. currentUser:", currentUser ? currentUser.uid : 'null');
-      setLoading(true); // Set loading true whenever auth state might be changing
+      setLoading(true); // Start loading whenever auth state changes
       setUser(currentUser);
+      setMemberRole(null); // Reset role while checking
 
       let currentRole: 'member' | 'admin' | null = null;
+      let targetPath: string | null = null; // Variable to store the redirect target
+      let needsRedirect = false;
+
       if (currentUser) {
-          currentRole = await verifyUserRole(currentUser);
-          console.log("Verified role:", currentRole);
-           setMemberRole(currentRole);
-           // Handle cases where Firestore profile might be missing after auth creation
-           if (!currentRole) {
-               console.error(`User ${currentUser.uid} authenticated but no Firestore role found.`);
-               toast({ title: "Profile Incomplete", description: "User profile data missing. Please contact support or try signing up again.", variant: "destructive" });
-               await handleSignOut(); // Sign out the user if profile is invalid/missing
-               setAuthInitialized(true);
-               setLoading(false);
-               return; // Stop further processing for this user
-           }
-      } else {
-          console.log("No current user, setting role to null.");
-          setMemberRole(null);
-      }
+        try {
+            currentRole = await verifyUserRole(currentUser);
+            console.log("Verified role:", currentRole);
+            setMemberRole(currentRole); // Set the role state
 
-      const isAuthPage = pathname.startsWith('/auth');
-      const isAdminPage = pathname.startsWith('/admin');
-      const isMemberPage = pathname.startsWith('/member');
-       const isHomePage = pathname === '/';
-
-      console.log(`Routing checks: isAuthPage=${isAuthPage}, isAdminPage=${isAdminPage}, isMemberPage=${isMemberPage}, isHomePage=${isHomePage}, currentUser=${!!currentUser}, currentRole=${currentRole}`);
-
-
-       // --- Redirection Logic ---
-        if (!currentUser) {
-            // Not logged in
-            if (!isAuthPage && !isHomePage /* Allow access to home page if needed */) {
-                console.log("User not logged in, redirecting to login.");
-                router.push('/auth/login');
+            if (!currentRole) {
+                // User authenticated but no Firestore profile/role found
+                console.error(`User ${currentUser.uid} authenticated but no Firestore role found. Signing out.`);
+                toast({ title: "Profile Error", description: "User profile data is missing or invalid. Please sign up again or contact support.", variant: "destructive" });
+                await handleSignOut(); // Initiate sign out
+                // Sign out will trigger another auth state change, which will redirect to login if needed
+                // No need to set targetPath here, let the next cycle handle it
             } else {
-                console.log("User not logged in, but on auth/home page. No redirect needed.");
-                 setLoading(false); // Stop loading if on allowed public page
-            }
-        } else {
-            // Logged in
-             if (!currentRole) {
-                 // This case is handled above by signing out, but as a safeguard:
-                 console.error("User logged in but role check failed. Forcing sign out.");
-                 await handleSignOut();
-             }
-            else if (isAuthPage || isHomePage) {
-                // Logged in, but on auth page or home page -> redirect to dashboard
-                console.log(`User logged in (role: ${currentRole}), redirecting from auth/home page.`);
-                if (currentRole === 'admin') {
-                    router.push('/admin');
-                } else {
-                    router.push('/member');
-                }
-            } else {
-                // Logged in and on a dashboard page -> verify correct dashboard
-                if (isAdminPage && currentRole !== 'admin') {
+                 // User logged in and role verified
+                 const isAuthPage = pathname.startsWith('/auth');
+                 const isHomePage = pathname === '/';
+                 const isAdminPage = pathname.startsWith('/admin');
+                 const isMemberPage = pathname.startsWith('/member');
+
+                 if (isAuthPage || isHomePage) {
+                    // Redirect from auth/home page to appropriate dashboard
+                    targetPath = currentRole === 'admin' ? '/admin' : '/member';
+                    console.log(`User logged in (role: ${currentRole}), redirecting from ${pathname} to ${targetPath}`);
+                    needsRedirect = true;
+                 } else if (isAdminPage && currentRole !== 'admin') {
+                    // Non-admin on admin page
                     console.log("Role mismatch: Non-admin on admin page. Redirecting to member.");
                     toast({ title: "Access Denied", description: "Redirecting to your dashboard.", variant: "destructive" });
-                    router.push('/member');
-                } else if (isMemberPage && currentRole !== 'member') {
-                    // Allow admins to see member page, or redirect if needed
-                    // console.log("Role mismatch: Admin on member page. Allowing access / Redirecting to admin.");
-                     // toast({ title: "Redirecting", description: "Redirecting to admin dashboard.", variant: "default" });
-                     // router.push('/admin'); // Uncomment to force admins to admin page
-                     setLoading(false); // Allow access or stop loading if no redirect needed here
-                } else {
+                    targetPath = '/member';
+                    needsRedirect = true;
+                 } else if (isMemberPage && currentRole === 'admin') {
+                     // Admin on member page - allow
+                     console.log("Admin on member page. Access allowed.");
+                     needsRedirect = false;
+                 } else if ((isAdminPage && currentRole === 'admin') || (isMemberPage && currentRole === 'member')){
+                     // User on correct page
                      console.log("User logged in, on correct page. No redirect needed.");
-                     setLoading(false); // Correct page, stop loading
-                }
+                     needsRedirect = false;
+                 } else {
+                     // Catch-all for unexpected state (e.g., logged in but on a non-existent page)
+                     // Default to redirecting to their dashboard
+                     console.warn(`User logged in (role: ${currentRole}), on unexpected page ${pathname}. Redirecting.`);
+                     targetPath = currentRole === 'admin' ? '/admin' : '/member';
+                     needsRedirect = true;
+                 }
             }
+        } catch (error) {
+            // Error during role verification
+            console.error("Error during role verification:", error);
+            toast({ title: "Authentication Error", description: "Could not verify user details.", variant: "destructive"});
+            await handleSignOut(); // Initiate sign out
+            // Let the next auth state change handle redirection
         }
+      } else {
+          // No user logged in
+           const isAuthPage = pathname.startsWith('/auth');
+           if (!isAuthPage) {
+                console.log("User not logged in, redirecting to login.");
+                targetPath = '/auth/login';
+                needsRedirect = true;
+           } else {
+                console.log("User not logged in, on auth page. No redirect needed.");
+                needsRedirect = false;
+           }
+      }
 
-
-      // Mark auth as initialized after the first check completes
-        if (!authInitialized) {
-            setAuthInitialized(true);
-        }
-
-      // Ensure loading is false if no redirection is needed or after navigation starts
-      // Use a small timeout only if a redirect wasn't explicitly pushed immediately
-      // to prevent hiding loader too early on fast networks/cached pages.
-       if (loading) { // Check if loading is still true (meaning no immediate redirect pushed)
-            setTimeout(() => {
-                 console.log("Setting loading to false after timeout.");
-                 setLoading(false);
-             }, 100); // Adjust timeout if needed
+       // Perform redirection if needed
+       if (needsRedirect && targetPath && targetPath !== pathname) {
+            router.push(targetPath);
+            // Setting loading false after push might be too early,
+            // but let's try it to avoid prolonged loading screens.
+            // If issues persist, remove this line and rely on the next effect run.
+             setLoading(false);
+       } else {
+            // No redirect needed or already on the target path
+            setLoading(false); // Stop loading
        }
 
+      // Mark auth as initialized after the first check attempt (success or failure)
+       if (!authInitialized) {
+           setAuthInitialized(true);
+           // If not redirecting, ensure loading stops after initialization
+           if (!needsRedirect) {
+               setLoading(false);
+           }
+       }
+
+       console.log(`Auth state update complete. User: ${currentUser?.uid ?? 'null'}, Role: ${currentRole}, Loading: ${!needsRedirect && !authInitialized ? true : loading}, Redirecting: ${needsRedirect}, Target: ${targetPath}`);
 
     });
 
@@ -162,10 +173,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
          console.log("Auth listener unsubscribing.");
          unsubscribe();
     }
-    // Include handleSignOut in dependency array if needed, but it's memoized with useCallback
-  }, [router, pathname, authInitialized, handleSignOut]); // Re-run when route changes or auth initializes
+    // Include handleSignOut in dependency array
+  }, [router, pathname, authInitialized, handleSignOut]); // Re-run when dependencies change
 
   // Show a loading state ONLY during the very initial Firebase auth check
+  // OR if loading is explicitly true (e.g., during sign out)
   if (!authInitialized || loading) {
      console.log(`Showing loading screen: authInitialized=${authInitialized}, loading=${loading}`);
     return (

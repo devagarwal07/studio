@@ -3,7 +3,7 @@
 
 import type React from 'react';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation'; // Keep useRouter for potential future use if needed
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { auth } from '@/lib/firebase';
 import { createUserWithEmailAndPassword, updateProfile, fetchSignInMethodsForEmail } from 'firebase/auth';
 import Link from 'next/link';
-import { createOrUpdateMember, getMemberById } from '@/services/memberService'; // Import Firestore service
+import { createOrUpdateMember } from '@/services/memberService'; // Import Firestore service
 import type { Member } from '@/types';
 
 type Role = 'member' | 'admin';
@@ -30,7 +30,7 @@ export default function SignupPage() {
   const [displayName, setDisplayName] = useState('');
   const [selectedRole, setSelectedRole] = useState<Role>('member'); // Default to member
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
+  // const router = useRouter(); // Keep for potential future use, but not needed for redirect now
 
   const handleSignup = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -104,10 +104,12 @@ export default function SignupPage() {
                 title: "Signup Successful",
                 description: "Account created. Redirecting...",
             });
-            // AuthProvider will handle redirection based on role after login state changes.
-            // Explicitly set intended role for immediate redirect attempt after signup completes.
-            sessionStorage.setItem('intendedRole', selectedRole);
-            // The onAuthStateChanged listener in AuthProvider will pick this up.
+
+            // NO LONGER NEEDED: AuthProvider will handle redirection based on role
+            // The onAuthStateChanged listener in AuthProvider will detect the new user
+            // and redirect them to the appropriate dashboard (/member or /admin).
+            // sessionStorage.removeItem('intendedRole'); // Clear any potentially stale role hint
+
         } else {
              throw new Error("User creation failed unexpectedly.");
         }
