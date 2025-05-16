@@ -34,23 +34,31 @@ export default function LoginPage() {
             const memberProfile = await getMemberById(user.uid);
 
             if (!memberProfile) {
-                 // Handle case where user exists in Auth but not Firestore (e.g., incomplete signup)
-                 // Option 1: Try to create the profile now (if display name is available)
+                 // Handle case where user exists in Auth but not Firestore (e.g., incomplete signup OR admin not yet in DB)
+                 // For Google Sign-in attempting admin, this is where an admin might be auto-created if desired,
+                 // but for this flow (preset admin credentials), we expect admin to exist.
+                 if (intendedRole === 'admin') {
+                     throw new Error("Admin profile not found in database. Admins must have preset credentials.");
+                 }
+
+                 // If it's a member role attempt and profile is missing (e.g., from Google sign-in first time)
                  if (user.displayName && user.email) {
-                     console.warn("User found in Auth but not Firestore. Creating profile...");
+                     console.warn("User found in Auth but not Firestore. Creating member profile...");
                      const memberData: Omit<Member, 'id'> = {
                          name: user.displayName,
                          email: user.email,
                          points: 0,
-                         role: intendedRole, // Use intended role for profile creation here
+                         role: 'member', // Only create member profiles here
                      };
                       await createOrUpdateMember(memberData, user.uid);
-                      // Now check if the *created* role matches the intended one (should match if creation used intendedRole)
-                      if (intendedRole === 'admin') router.push('/admin');
-                      else router.push('/member');
+                      // Now check if the *created* role matches the intended one (should be 'member')
+                      if (intendedRole === 'member') router.push('/member');
+                      else { // Should not happen if only creating members
+                          await signOut(auth);
+                          toast({title: "Login Error", description: "Profile created as member, but admin login attempted.", variant: "destructive"});
+                      }
                  } else {
-                      // Option 2: Sign out and show error
-                     throw new Error("User profile not found and cannot be created automatically.");
+                     throw new Error("User profile not found and cannot be created automatically (missing display name or email).");
                  }
 
             } else if (memberProfile.role !== intendedRole) {
@@ -61,8 +69,6 @@ export default function LoginPage() {
                     description: `You are registered as a ${memberProfile.role}. Please login with the correct role.`,
                     variant: "destructive",
                 });
-                // Optionally reset the selected role UI, though sign out handles access
-                // setSelectedRole(memberProfile.role);
             } else {
                 // Role matches, redirect accordingly
                 if (intendedRole === 'admin') {
@@ -97,7 +103,7 @@ export default function LoginPage() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       // Don't redirect immediately, verify role first
        await verifyRoleAndRedirect(userCredential.user, selectedRole);
-    } catch (error: any) {
+    } catch (error: any) { // Added missing opening brace
       console.error("Login failed:", error);
       let description = "Invalid email or password.";
         if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
@@ -128,20 +134,32 @@ export default function LoginPage() {
 
         if (!memberProfile) {
             // New user via Google Sign-In or existing Auth user missing Firestore profile
+            if (selectedRole === 'admin') {
+                 await signOut(auth); // Sign out the user
+                 toast({
+                    title: "Admin Login Failed",
+                    description: "Admin accounts must be preset. Google Sign-In cannot create new admin accounts.",
+                    variant: "destructive",
+                 });
+                 setIsGoogleLoading(false);
+                 return;
+            }
+
+            // If not admin, proceed to create a member profile
             if (!user.displayName || !user.email) {
                  throw new Error("Google account information missing (display name or email).");
             }
-             console.log("New Google Sign-In user or missing profile. Creating Firestore entry...");
+             console.log("New Google Sign-In user or missing profile. Creating Firestore entry as member...");
             const memberData: Omit<Member, 'id'> = {
                 name: user.displayName,
                 email: user.email,
                 points: 0,
-                role: selectedRole, // Assign the role selected in the UI *at the time of Google Sign-In*
+                role: 'member', // Only create 'member' role through Google Sign-In
             };
             await createOrUpdateMember(memberData, user.uid);
 
-            // Verify the role just created matches intended (it should) and redirect
-             await verifyRoleAndRedirect(user, selectedRole);
+            // Verify the role just created (should be 'member') matches intended role (must be 'member') and redirect
+             await verifyRoleAndRedirect(user, 'member');
 
         } else {
              // Existing user - verify their stored role matches the selected role
@@ -155,7 +173,7 @@ export default function LoginPage() {
             description = "Google Sign-In cancelled.";
         } else if (error.code === 'auth/account-exists-with-different-credential') {
              description = "An account already exists with this email address using a different sign-in method.";
-         } else if (error.message.includes("Role mismatch")) {
+         } else if (error.message.includes("Role mismatch") || error.message.includes("Admin profile not found")) {
              // Error message from verifyRoleAndRedirect is sufficient
               description = error.message;
          } else if (error.message) {
@@ -167,7 +185,7 @@ export default function LoginPage() {
             variant: "destructive",
         });
          // Ensure user is signed out if verification failed mid-process
-         if(auth.currentUser && auth.currentUser.uid === error.uid) { // Basic check if error is related to current user
+         if(auth.currentUser && auth.currentUser.uid === error.uid) { 
              await signOut(auth);
          }
     } finally {
@@ -252,7 +270,7 @@ export default function LoginPage() {
            <p className="text-sm text-muted-foreground">
              Don't have an account?{' '}
              <Link href="/auth/signup" className="underline hover:text-primary transition-colors duration-200">
-               Sign up
+               Sign up as Member
              </Link>
            </p>
         </CardFooter>

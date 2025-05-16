@@ -8,15 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // Import RadioGroup
 import { toast } from "@/hooks/use-toast";
 import { auth } from '@/lib/firebase';
 import { createUserWithEmailAndPassword, updateProfile, fetchSignInMethodsForEmail } from 'firebase/auth';
 import Link from 'next/link';
 import { createOrUpdateMember } from '@/services/memberService'; // Import Firestore service
 import type { Member } from '@/types';
-
-type Role = 'member' | 'admin';
 
 // Simple email validation regex
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -28,7 +25,6 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [selectedRole, setSelectedRole] = useState<Role>('member'); // Default to member
   const [isLoading, setIsLoading] = useState(false);
   // const router = useRouter(); // Keep for potential future use, but not needed for redirect now
 
@@ -52,21 +48,7 @@ export default function SignupPage() {
       toast({ title: "Passwords do not match", variant: "destructive" });
       return;
     }
-    // VERY IMPORTANT: Admin role signup should ideally be restricted.
-    // For this example, we'll allow it but add checks. In a real app,
-    // only existing admins should be able to create new admins.
-    if (selectedRole === 'admin') {
-        // Optional: Add a simple check or require an admin code
-        console.warn("Attempting to sign up as admin. This should be restricted in production.");
-        // Example: Prompt for an admin secret code if desired
-        // const adminCode = prompt("Enter admin secret code:");
-        // if (adminCode !== "SUPER_SECRET_CODE") { // Replace with actual check
-        //     toast({ title: "Invalid Admin Code", variant: "destructive" });
-        //     return;
-        // }
-    }
     // --- End Input Validation ---
-
 
     setIsLoading(true);
 
@@ -91,12 +73,12 @@ export default function SignupPage() {
             // 3. Update Firebase Auth profile (display name)
             await updateProfile(user, { displayName: displayName.trim() });
 
-            // 4. Create member document in Firestore
+            // 4. Create member document in Firestore with 'member' role
             const memberData: Omit<Member, 'id'> = {
                 name: displayName.trim(),
                 email: user.email!, // Email is guaranteed non-null after successful signup
                 points: 0, // Initial points
-                role: selectedRole, // Store the selected role
+                role: 'member', // All signups through this page are members
             };
             await createOrUpdateMember(memberData, user.uid);
 
@@ -107,8 +89,7 @@ export default function SignupPage() {
 
             // NO LONGER NEEDED: AuthProvider will handle redirection based on role
             // The onAuthStateChanged listener in AuthProvider will detect the new user
-            // and redirect them to the appropriate dashboard (/member or /admin).
-            // sessionStorage.removeItem('intendedRole'); // Clear any potentially stale role hint
+            // and redirect them to the /member dashboard.
 
         } else {
              throw new Error("User creation failed unexpectedly.");
@@ -139,34 +120,11 @@ export default function SignupPage() {
     <div className="flex items-center justify-center min-h-screen bg-background">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Sign Up</CardTitle>
-          <CardDescription>Create your Leaderboard Lite account.</CardDescription>
+          <CardTitle className="text-2xl">Sign Up as Member</CardTitle>
+          <CardDescription>Create your Leaderboard Lite member account.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSignup}>
           <CardContent className="grid gap-4">
-             {/* Role Selection */}
-            <div className="grid gap-2">
-                <Label>Sign Up As</Label>
-                <RadioGroup
-                    defaultValue="member"
-                    value={selectedRole}
-                    onValueChange={(value: Role) => setSelectedRole(value)}
-                    className="flex space-x-4"
-                    disabled={isLoading}
-                >
-                    <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="member" id="r-member" />
-                        <Label htmlFor="r-member">Member</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="admin" id="r-admin" />
-                        <Label htmlFor="r-admin">Admin</Label>
-                    </div>
-                </RadioGroup>
-                 {selectedRole === 'admin' && (
-                     <p className="text-xs text-destructive/80 mt-1">Warning: Admin signup should be restricted in production.</p>
-                 )}
-            </div>
             {/* Display Name */}
             <div className="grid gap-2">
               <Label htmlFor="displayName">Display Name</Label>
@@ -222,7 +180,7 @@ export default function SignupPage() {
           </CardContent>
           <CardFooter className="flex flex-col items-center space-y-2">
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Creating Account..." : `Sign Up as ${selectedRole === 'admin' ? 'Admin' : 'Member'}`}
+              {isLoading ? "Creating Account..." : "Sign Up as Member"}
             </Button>
              <p className="text-sm text-muted-foreground">
                Already have an account?{' '}
